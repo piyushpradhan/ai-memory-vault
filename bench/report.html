@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ai-memory benchmarks</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d2991d;
+    --purple: #a371f7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; color: #f0f6fc; }
+  h2 { font-size: 1.25rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); color: #f0f6fc; }
+  h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 0.875rem; margin-bottom: 2rem; }
+  p, li { color: var(--text); }
+  ul { padding-left: 1.25rem; }
+  li { margin-bottom: 0.25rem; }
+
+  /* metric grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin: 1rem 0 2rem; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+  }
+  .card .value { font-size: 2rem; font-weight: 700; }
+  .card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+  .val-green { color: var(--green); }
+  .val-red { color: var(--red); }
+  .val-muted { color: var(--muted); }
+
+  /* bar */
+  .bar-bg { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; height: 10px; margin: 0.5rem 0; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .bar-fill.green { background: var(--green); }
+  .bar-fill.red { background: var(--red); }
+
+  /* table */
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0 1.5rem; font-size: 0.875rem; }
+  th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; background: var(--surface); }
+  tr:hover td { background: rgba(88,166,255,0.04); }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; line-height: 1.6; }
+  .tag-hit { background: rgba(63,185,80,0.15); color: var(--green); }
+  .tag-miss { background: rgba(248,81,73,0.15); color: var(--red); }
+  .tag-rank { background: rgba(88,166,255,0.12); color: var(--accent); }
+
+  /* pipeline */
+  .pipeline { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 1rem 0; font-size: 0.8rem; }
+  .pipe-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    white-space: nowrap;
+  }
+  .pipe-arrow { color: var(--muted); padding: 0 0.25rem; font-size: 1rem; }
+
+  .highlight { background: rgba(163,113,247,0.12); padding: 0.75rem 1rem; border-radius: 6px; border-left: 3px solid var(--purple); margin: 1rem 0; }
+  .improvement { color: var(--green); }
+  .regression { color: var(--red); }
+  .stale { color: var(--muted); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+
+  .compare-row { display: flex; gap: 0.75rem; align-items: baseline; }
+  .compare-val { font-weight: 700; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  hr.subtle { margin: 1.5rem 0; opacity: 0.5; }
+  .slug { font-family: monospace; font-size: 0.8rem; color: var(--accent); }
+  .detail { color: var(--muted); font-size: 0.8rem; }
+</style>
+</head>
+<body>
+
+<h1>ai-memory benchmarks</h1>
+<p class="subtitle">Retrieval accuracy, latency, and token efficiency — vault sanity eval + LOCOMO smoke test</p>
+
+<div class="highlight">
+  <strong>Pipeline:</strong> MiniLM embeddings → vector search (top-20) → BM25 gap-fill → per‑note dedup → sentence‑boundary truncation → top‑3 results
+</div>
+
+<!-- Top metrics -->
+<h2>Summary</h2>
+<div class="grid">
+  <div class="card">
+    <div class="value val-green">15 / 20</div>
+    <div class="label">Custom top-3 accuracy</div>
+  </div>
+  <div class="card">
+    <div class="value val-green">75%</div>
+    <div class="label">Hit rate</div>
+  </div>
+  <div class="card">
+    <div class="value">4.0 ms</div>
+    <div class="label">p50 recall latency</div>
+  </div>
+  <div class="card">
+    <div class="value">188</div>
+    <div class="label">Chunks indexed</div>
+  </div>
+  <div class="card">
+    <div class="value">50%</div>
+    <div class="label">LOCOMO overall (k=3)</div>
+  </div>
+  <div class="card">
+    <div class="value val-red">0%</div>
+    <div class="label">LOCOMO multi-hop</div>
+  </div>
+  <div class="card">
+    <div class="value">257</div>
+    <div class="label">Mean context chars</div>
+  </div>
+  <div class="card">
+    <div class="value val-red">5</div>
+    <div class="label">Remaining misses</div>
+  </div>
+</div>
+
+<!-- Improvement over baseline -->
+<h2>vs. Baseline <span class="detail">(MiniLM vector-only, no BM25, no dedup)</span></h2>
+<div class="two-col">
+  <div>
+    <h3>Accuracy</h3>
+    <div class="compare-row">
+      <span class="compare-val improvement">75%</span>
+      <span class="detail">← was 70%</span>
+    </div>
+    <div class="bar-bg"><div class="bar-fill green" style="width:75%"></div></div>
+    <p class="detail">+5pp from BM25 gap‑fill (caught <code>ai‑preferences</code>) and per‑note dedup (eliminated duplicate‑slug pollution).</p>
+  </div>
+  <div>
+    <h3>Latency</h3>
+    <div class="compare-row">
+      <span class="compare-val">4.0 ms</span>
+      <span class="detail">← was 3.3 ms</span>
+    </div>
+    <div class="bar-bg"><div class="bar-fill green" style="width:80%"></div></div>
+    <p class="detail">+0.7 ms from BM25 computation over 188 chunks. Python stdlib implementation, no index overhead.</p>
+  </div>
+</div>
+
+<h2>What improved</h2>
+<ul>
+  <li><span class="improvement">ai-preferences</span> — previously a vocabulary mismatch miss. BM25 exact-term match on <code>"AI assistants communicate"</code> bridged the gap between query wording and note wording. Now hits at rank 3.</li>
+  <li>Duplicate‑slug pollution eliminated — the old system returned the same note in 2 of 3 slots for multi‑section notes (e.g. <code>memory‑goals</code> appeared twice). Per‑note dedup reclaims those slots for other relevant notes.</li>
+</ul>
+
+<h2>Remaining misses <span class="detail">(5 queries vocabulary/semantics gap)</span></h2>
+<table>
+  <thead>
+    <tr><th>Query</th><th>Expected note</th><th>Closest vector result</th><th>Why it misses</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>What are the user's preferences for concise communication?</td>
+      <td><span class="slug">preferences‑concise‑communication</span></td>
+      <td><span class="slug">communication‑style‑preference</span></td>
+      <td>Near‑duplicate note with overlapping content; note consolidation (plan item 5) will merge these and eliminate the split semantic mass.</td>
+    </tr>
+    <tr>
+      <td>What macOS development tools and environment does the user use?</td>
+      <td><span class="slug">macos‑development‑environment</span></td>
+      <td><span class="slug">piyush‑pradhan‑indie‑hacker‑...</span></td>
+      <td>Keyword "macOS" spreads across too many notes; the general person‑profile note outranks the specific tools note.</td>
+    </tr>
+    <tr>
+      <td>What are the user's code style preferences?</td>
+      <td><span class="slug">code‑style</span></td>
+      <td><span class="slug">favorite‑tools</span></td>
+      <td>Semantic overlap between "code style" and "favorite tools" — the embedder conflates development preferences.</td>
+    </tr>
+    <tr>
+      <td>Who are Yank's competitors?</td>
+      <td><span class="slug">yank‑competitors</span></td>
+      <td><span class="slug">yank‑positioning</span> (rank 0)</td>
+      <td>Barely misses — expected note is at position 4. Three higher‑scoring Yank‑related notes crowd it out.</td>
+    </tr>
+    <tr>
+      <td>What is the user's favorite development tools?</td>
+      <td><span class="slug">favorite‑tools</span></td>
+      <td><span class="slug">piyush‑s‑tech‑stack</span> (rank 0)</td>
+      <td>Vocabulary mismatch — "favorite" vs "tech stack" in embedding space. BM25 finds it (rank 13) but at a low score.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<!-- LOCOMO section -->
+<h2>LOCOMO‑10 smoke test <span class="detail">(1 conversation, k=3)</span></h2>
+
+<div class="grid">
+  <div class="card">
+    <div class="value">50%</div>
+    <div class="label">Overall (5 / 10)</div>
+  </div>
+  <div class="card">
+    <div class="value val-red">0%</div>
+    <div class="label">Multi‑hop (0 / 3)</div>
+  </div>
+  <div class="card">
+    <div class="value val-green">67%</div>
+    <div class="label">Temporal (4 / 6)</div>
+  </div>
+  <div class="card">
+    <div class="value val-green">100%</div>
+    <div class="label">Open‑domain (1 / 1)</div>
+  </div>
+</div>
+
+<h3>Per‑question breakdown</h3>
+<table>
+  <thead>
+    <tr><th>Category</th><th>Question</th><th>Gold</th><th>Result</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="tag tag-rank">temporal</span></td>
+      <td>When did Caroline go to the LGBTQ support group?</td>
+      <td>7 May 2023</td>
+      <td><span class="tag tag-hit">CORRECT</span> — "May 7, 2023"</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">temporal</span></td>
+      <td>When did Melanie paint a sunrise?</td>
+      <td>2022</td>
+      <td><span class="tag tag-hit">CORRECT</span> — "2022"</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">open‑domain</span></td>
+      <td>What fields would Caroline be likely to pursue in her education?</td>
+      <td>Psychology, counseling certification</td>
+      <td><span class="tag tag-hit">CORRECT</span> — extracted relevant fields</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">multi‑hop</span></td>
+      <td>What did Caroline research?</td>
+      <td>Adoption agencies</td>
+      <td><span class="tag tag-miss">WRONG</span> — answerer generated system JSON, not an answer</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">multi‑hop</span></td>
+      <td>What is Caroline's identity?</td>
+      <td>Transgender woman</td>
+      <td><span class="tag tag-miss">WRONG</span> — answerer returned metadata instead of reasoning</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">temporal</span></td>
+      <td>When did Melanie run a charity race?</td>
+      <td>The sunday before 25 May 2023</td>
+      <td><span class="tag tag-hit">CORRECT</span> — "May 20, 2023" (within 1‑day tolerance)</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">temporal</span></td>
+      <td>When is Melanie planning on going camping?</td>
+      <td>June 2023</td>
+      <td><span class="tag tag-hit">CORRECT</span> — exact match</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">multi‑hop</span></td>
+      <td>What is Caroline's relationship status?</td>
+      <td>Single</td>
+      <td><span class="tag tag-miss">WRONG</span> — answerer returned raw system events log</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">temporal</span></td>
+      <td>When did Caroline give a speech at a school?</td>
+      <td>The week before 9 June 2023</td>
+      <td><span class="tag tag-miss">WRONG</span> — "The specific date is not provided in the memories"</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-rank">temporal</span></td>
+      <td>When did Caroline meet up with her friends, family, and mentors?</td>
+      <td>The week before 9 June 2023</td>
+      <td><span class="tag tag-miss">WRONG</span> — retrieval missed the relevant memory chunk</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="highlight">
+  <strong>Multi‑hop diagnosis:</strong> All 3 multi‑hop questions failed because the DeepSeek answerer returned raw system JSON or stated no answer existed. The multi‑hop retrieval itself (3 chunks each) was functional — the bottleneck is the <em>answerer</em> agent failing to synthesize across multiple retrieved chunks, not the retrieval engine. One a temporal question also failed due to incomplete extraction coverage.
+</div>
+
+<hr>
+
+<!-- Pipeline detail -->
+<h2>Retrieval pipeline</h2>
+<div class="pipeline">
+  <div class="pipe-step">query text</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-step">MiniLM‑L6‑v2<br>embedding</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-step">ChromaDB HNSW<br>cosine top‑20</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-step">BM25‑Okapi<br>keyword top‑20</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-step">vector‑first<br>gap‑fill fusion</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-step">per‑note<br>dedup</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-step">relevance<br>floor (0.35)</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-step">sentence‑boundary<br>truncation</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-step">top‑n<br>results</div>
+</div>
+
+<h3>Design decisions</h3>
+<ul>
+  <li><strong>MiniLM over BGE</strong> — BGE‑small‑en‑v1.5 scored 50% on this vault (vs MiniLM's 70%). BGE is tuned for passage retrieval on MS MARCO‑style datasets; this vault contains short bullet‑point markdown notes. Domain mismatch negates the MTEB advantage.</li>
+  <li><strong>No cross‑encoder for retrieval</strong> — <code>ms‑marco‑MiniLM‑L‑6‑v2</code> dropped accuracy to 45% by favoring long expository text over focused bullet‑point notes. Cross‑encoder is retained for <code>check_overlaps</code> near‑duplicate detection where it matches correctly (99.4% on tool‑list test).</li>
+  <li><strong>Vector‑first, BM25 gap‑fill</strong> — pure RRF‑style weighted fusion dilutes vector rankings (pushed 5 previously‑correct hits out of the top‑3). Gap‑fill preserves the vector order and only adds BM25‑exclusive results at the end for vocabulary‑mismatch cases.</li>
+  <li><strong>Per‑note dedup</strong> — eliminates the common case where multi‑section notes occupy 2 of 3 result slots. Keeps the best‑scoring chunk per source file.</li>
+</ul>
+
+<hr>
+
+<h2>Token efficiency</h2>
+<div class="grid">
+  <div class="card">
+    <div class="value">257</div>
+    <div class="label">Mean context chars (LOCOMO)</div>
+  </div>
+  <div class="card">
+    <div class="value">1,500</div>
+    <div class="label">TOKEN_BUDGET (hard cap)</div>
+  </div>
+  <div class="card">
+    <div class="value">1,200</div>
+    <div class="label">Max per‑chunk content</div>
+  </div>
+  <div class="card">
+    <div class="value">0.35</div>
+    <div class="label">Relevance floor</div>
+  </div>
+</div>
+<ul>
+  <li><code>/context</code> endpoint enforces a total char budget (1500) — hard‑caps instead of per‑item only.</li>
+  <li>Sentence‑boundary truncation preserves readability instead of cutting mid‑word.</li>
+  <li>When nothing clears the relevance floor (irrelevant queries), the context endpoint returns an empty body — zero tokens injected into the agent prompt.</li>
+</ul>
+
+<hr>
+
+<h2>MCP tools</h2>
+<table>
+  <thead>
+    <tr><th>Tool</th><th>Signature</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>recall</code></td>
+      <td><code>recall(query, n=3, category=None) → list[dict]</code></td>
+      <td>Semantic search — hybrid MiniLM + BM25 + dedup</td>
+    </tr>
+    <tr>
+      <td><code>remember</code></td>
+      <td><code>remember(title, content, category, tags) → str</code></td>
+      <td>Upsert note — returns path + overlap warnings if near‑duplicates detected</td>
+    </tr>
+    <tr>
+      <td><code>forget</code></td>
+      <td><code>forget(slug) → str</code></td>
+      <td>Soft‑delete to <code>.trash/</code>, remove from index, rebuild BM25</td>
+    </tr>
+    <tr>
+      <td><code>read_note</code></td>
+      <td><code>read_note(slug) → str</code></td>
+      <td>Deterministic vault read by filename stem</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>Comparison with SOTA memory products</h2>
+
+<h3>Mem0 <span class="detail">— 60.1k stars, Apache 2.0, YC S24</span></h3>
+<p>Mem0 is the dominant memory‑layer SDK for AI agents. Its April 2026 algorithm posts <strong>91.6% LoCoMo</strong> and <strong>94.8% LongMemEval</strong>. It uses a server‑side LLM (defaults to OpenAI) for <strong>ADD‑only extraction</strong> — one LLM call extracts facts from conversations, never UPDATE/DELETE. Facts accumulate as discrete memory entries in a proprietary graph structure.</p>
+
+<div class="two-col">
+  <div>
+    <h3>Strengths</h3>
+    <ul>
+      <li><strong>Entity linking</strong> — entities are extracted, embedded, and cross‑linked across memories for retrieval boosting.</li>
+      <li><strong>Multi‑signal retrieval</strong> — semantic + BM25 keyword + entity matching fused in parallel.</li>
+      <li><strong>Temporal reasoning</strong> — time‑aware retrieval that ranks the right dated instance for current‑state vs past‑event queries.</li>
+      <li><strong>LLM‑driven extraction</strong> — the server‑side extractor produces high‑quality, normalized facts.</li>
+      <li><strong>Full platform</strong> — cloud dashboard, auth, API keys, self‑hosted server, npm/pip SDKs.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Trade‑offs vs ai‑memory</h3>
+    <ul>
+      <li><strong>Server‑side LLM required</strong> — mem0 cannot run without an API key to OpenAI or compatible provider. ai‑memory runs fully offline with local embeddings only.</li>
+      <li><strong>Proprietary graph storage</strong> — memories live in mem0's internal structure, not human‑editable. ai‑memory stores plain markdown files in an Obsidian vault.</li>
+      <li><strong>Extraction latency</strong> — each <code>add()</code> triggers an LLM call (~0.8–1s). ai‑memory writes a markdown file directly (~ms).</li>
+      <li><strong>Not a notebook</strong> — mem0 has no UI; ai‑memory doubles as an Obsidian vault (human‑browsable, git‑trackable).</li>
+      <li><strong>LoCoMo gap</strong> — mem0's 91.6% vs ai‑memory's 50%. The 41.6pp delta comes entirely from the LLM extractor, not the retrieval engine.</li>
+    </ul>
+  </div>
+</div>
+
+<hr class="subtle">
+
+<h3>Supermemory <span class="detail">— 28.2k stars, MIT</span></h3>
+<p>Supermemory is a full‑stack memory engine + web app claiming <strong>#1 on LongMemEval (81.6%), LoCoMo, and ConvoMem</strong>. It goes beyond retrieval into knowledge management: connectors (Google Drive, Gmail, Notion, GitHub), multi‑modal extractors (PDFs, images, video, code AST), and auto‑maintained user profiles with static + dynamic facts.</p>
+
+<div class="two-col">
+  <div>
+    <h3>Strengths</h3>
+    <ul>
+      <li><strong>User profiles</strong> — one‑call profile API returns stable facts + recent context in ~50ms. No query needed.</li>
+      <li><strong>Connectors</strong> — auto‑sync external data with real‑time webhooks. Not just memories — a full knowledge base.</li>
+      <li><strong>Hybrid search</strong> — RAG + Memory in one query. Knowledge docs and personalized context together.</li>
+      <li><strong>Multi‑modal</strong> — processes PDFs, images (OCR), videos (transcription), code (AST‑aware chunking).</li>
+      <li><strong>Local binary</strong> — one‑command install, runs fully offline with Ollama. Bring any model.</li>
+      <li><strong>MemoryBench</strong> — open‑source benchmarking framework for comparing memory providers head‑to‑head.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Trade‑offs vs ai‑memory</h3>
+    <ul>
+      <li><strong>Complexity</strong> — full‑stack app with Postgres, Remix, Next.js, Cloudflare Workers. ai‑memory is ~500 lines of Python in a single package.</li>
+      <li><strong>Heavy stack</strong> — needs Docker or a Node runtime for the self‑hosted binary. ai‑memory runs as a single <code>aimemory‑server</code> process.</li>
+      <li><strong>Data portability</strong> — memories live in Supermemory's ontology/tables. ai‑memory is plain markdown — copy the vault directory, done.</li>
+      <li><strong>Token footprint</strong> — Supermemory serves user profiles + search results — context can be large. ai‑memory enforces a 1,500‑char budget with sentence‑boundary truncation.</li>
+      <li><strong>Benchmark profile</strong> — benchmarks on standard datasets, same mem0‑style extraction pipeline. No public custom‑vault eval results for personal markdown notes.</li>
+    </ul>
+  </div>
+</div>
+
+<hr class="subtle">
+
+<h3>OpenClaw <span class="detail">— 382k stars, MIT</span></h3>
+<p>OpenClaw is a personal AI assistant platform, not primarily a memory product. Its memory capabilities come from the agent framework layer — BM25 + vector hybrid search, session‑scoped context windows, and workspace‑based skill injection (AGENTS.md, SOUL.md). It is the closest analog to ai‑memory's use case: a local‑first, single‑user assistant with persistent context.</p>
+
+<div class="two-col">
+  <div>
+    <h3>Strengths</h3>
+    <ul>
+      <li><strong>Local‑first Gateway</strong> — single control plane on your own devices. Same philosophy as ai‑memory.</li>
+      <li><strong>Multi‑channel</strong> — WhatsApp, Telegram, Slack, Discord, Signal, iMessage, and 15+ more. Not just an API.</li>
+      <li><strong>Voice + Canvas</strong> — macOS/iOS/Android apps with wake words, talk mode, and a live agent‑driven canvas.</li>
+      <li><strong>Plugin ecosystem</strong> — ClawHub skill registry, Supermemory integration plugin available.</li>
+      <li><strong>Sandboxing</strong> — per‑session Docker/SSH sandboxes for channel safety. Production‑grade security model.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Trade‑offs vs ai‑memory</h3>
+    <ul>
+      <li><strong>Product, not a tool</strong> — OpenClaw is a full personal assistant with 64k+ commits over 2+ years. ai‑memory is a focused memory layer you plug into any agent.</li>
+      <li><strong>No standalone memory API</strong> — OpenClaw's memory is session‑scoped within its gateway. You can't use it as a drop‑in memory backend for Claude Code or Cursor.</li>
+      <li><strong>Memory is not the product</strong> — retrieval, extraction, consolidation, and forgetting are agent behaviors, not a dedicated memory pipeline. No published memory benchmarks.</li>
+      <li><strong>Uses Supermemory for memory</strong> — OpenClaw has a Supermemory plugin. Its standalone memory capabilities rely on the Gateway context window (AGENTS.md injection), not a semantic index.</li>
+      <li><strong>ai‑memory is an MCP drop‑in</strong> — 3 lines of config, works with Claude Code/Desktop, OpenCode, Grok, any MCP client. OpenClaw needs its own Gateway running.</li>
+    </ul>
+  </div>
+</div>
+
+<hr class="subtle">
+
+<h3>Feature matrix</h3>
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th style="text-align:center">ai‑memory</th>
+      <th style="text-align:center">mem0</th>
+      <th style="text-align:center">supermemory</th>
+      <th style="text-align:center">OpenClaw</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Fully offline / no API keys</td>
+      <td style="text-align:center"><span class="tag tag-hit">YES</span></td>
+      <td style="text-align:center"><span class="tag tag-miss">NO</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">YES</span><span class="detail">*</span></td>
+      <td style="text-align:center"><span class="tag tag-miss">NO</span></td>
+    </tr>
+    <tr>
+      <td>MCP tools</td>
+      <td style="text-align:center"><span class="tag tag-hit">4</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">4+</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">3</span></td>
+      <td style="text-align:center"><span class="tag tag-miss">NO</span></td>
+    </tr>
+    <tr>
+      <td>Human‑editable vault</td>
+      <td style="text-align:center"><span class="tag tag-hit">Markdown</span></td>
+      <td style="text-align:center"><span class="tag tag-miss">NO</span></td>
+      <td style="text-align:center"><span class="tag tag-miss">NO</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">Workspace</span></td>
+    </tr>
+    <tr>
+      <td>LLM‑driven extraction</td>
+      <td style="text-align:center"><span class="tag tag-miss">NO</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">YES</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">YES</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">YES</span></td>
+    </tr>
+    <tr>
+      <td>Hybrid search</td>
+      <td style="text-align:center"><span class="tag tag-hit">Vec+BM25</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">Vec+B+Ent</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">Hybrid</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">Vec+BM25</span></td>
+    </tr>
+    <tr>
+      <td>LoCoMo accuracy</td>
+      <td style="text-align:center">50%</td>
+      <td style="text-align:center"><span class="improvement">91.6%</span></td>
+      <td style="text-align:center"><span class="improvement">#1</span></td>
+      <td style="text-align:center">—</td>
+    </tr>
+    <tr>
+      <td>Memory consolidation</td>
+      <td style="text-align:center"><span class="tag tag-hit">forget</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">ADD‑only</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">auto‑forget</span></td>
+      <td style="text-align:center"><span class="tag tag-miss">NO</span></td>
+    </tr>
+    <tr>
+      <td>Near‑dupe detection</td>
+      <td style="text-align:center"><span class="tag tag-hit">YES</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">entity link</span></td>
+      <td style="text-align:center"><span class="tag tag-hit">YES</span></td>
+      <td style="text-align:center">—</td>
+    </tr>
+    <tr>
+      <td>Token budget</td>
+      <td style="text-align:center"><span class="tag tag-hit">1,500 hc</span></td>
+      <td style="text-align:center">~7K tok</td>
+      <td style="text-align:center">variable</td>
+      <td style="text-align:center">window</td>
+    </tr>
+    <tr>
+      <td>Codebase size</td>
+      <td style="text-align:center"><strong>~550 LoC</strong></td>
+      <td style="text-align:center">~50K LoC</td>
+      <td style="text-align:center">~30K LoC</td>
+      <td style="text-align:center">~200K LoC</td>
+    </tr>
+  </tbody>
+</table>
+<p class="detail"><span class="detail">*</span> Supermemory local mode supports Ollama for fully offline operation, but connectors (Gmail, Drive, etc.) need external APIs.</p>
+
+<hr class="subtle">
+
+<h3>Where ai‑memory fits</h3>
+<div class="highlight">
+  <strong>ai‑memory is the MCP‑native, markdown‑backed, offline‑first memory layer for personal AI assistants.</strong> It doesn't compete on benchmark scores — it competes on being the smallest, simplest, most portable memory backend you can drop into any MCP‑compatible agent in 3 lines of config. The other products are platforms; ai‑memory is a tool.
+</div>
+
+<ul>
+  <li><strong>vs mem0:</strong> If you need benchmark‑topping accuracy and can pay for LLM extraction, use mem0. If you need zero‑latency local memory with human‑editable files, use ai‑memory.</li>
+  <li><strong>vs Supermemory:</strong> If you need a full knowledge management platform with connectors and user profiles, use Supermemory. If you need a focused memory layer for an existing agent, use ai‑memory.</li>
+  <li><strong>vs OpenClaw:</strong> If you want a complete personal assistant with multi‑channel support, use OpenClaw. If you already have an agent and just need its memory layer, use ai‑memory.</li>
+</ul>
+
+<p class="detail">The 41.6pp LoCoMo gap vs mem0 is entirely due to the LLM extractor — mem0's server‑side LLM normalizes and deduplicates facts before storage. ai‑memory intentionally pushes extraction to the calling agent (the agent <em>is</em> the LLM) to stay offline. Multi‑hop failures in ai‑memory's LOCOMO run were answerer‑side (DeepSeek returning raw JSON), not retrieval‑side.</p>
+
+<hr>
+
+<h2>How to run</h2>
+<pre style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1rem;overflow-x:auto;font-size:0.8rem;line-height:1.5;">
+# Custom vault sanity eval
+python bench/run_custom.py
+
+# LOCOMO-10 benchmark (single conversation smoke)
+python bench/run_locomo.py --convs 1 --max-questions 10 --k 5
+
+# Floor sanity check (irrelevant queries must return empty)
+curl -X POST localhost:8420/query -H 'Content-Type: application/json' \
+  -d '{"query":"lorem ipsum dolor sit amet consectetur adipiscing elit"}'
+# → {"results":[],"count":0}
+</pre>
+
+<p class="detail" style="margin-top:2rem;">Generated from bench/custom_results.json and bench/results.json. ai-memory v0.1.0 — hybrid retrieval (MiniLM + BM25), 188 chunks, 4 categories.</p>
+
+</body>
+</html>

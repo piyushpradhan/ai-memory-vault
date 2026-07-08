@@ -1,0 +1,12 @@
+__pycache__/
+.chroma/
+.venv/
+*.egg-info/
+dist/
+.env
+.DS_Store
+logs/
+bench/data/
+bench/.tmp/
+bench/results.json
+bench/custom_results.json

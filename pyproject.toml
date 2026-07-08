@@ -1,0 +1,24 @@
+[project]
+name = "ai-memory"
+version = "0.1.0"
+description = "Permanent AI memory via markdown + Obsidian, optimized for minimal token usage"
+requires-python = ">=3.10"
+dependencies = [
+    "chromadb>=0.5.0",
+    "sentence-transformers>=3.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "python-frontmatter>=1.1.0",
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+aimemory = "aimemory.cli:main"
+aimemory-server = "aimemory.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aimemory"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

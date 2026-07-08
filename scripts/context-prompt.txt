@@ -1,0 +1,9 @@
+## AI memory (automatic — never ask the user to "remember" anything)
+
+A persistent memory vault is available via the `aimemory` MCP tools (`recall`, `remember`, `forget`, `read_note`). Relevant context is also auto-injected into each prompt when available.
+
+- Before answering, use any injected context, or call `recall(query)` to surface relevant facts, preferences, or project state.
+- After completing or deciding anything significant in a project, upsert its status note: `remember(title="status-<project>", category="projects", content="## Done\n- ...\n## In progress\n- ...\n## Next\n- ...\n## Decisions\n- ...")`. Same title overwrites (slug-keyed, no duplicates).
+- When you learn a durable user fact or preference, save it: `remember(title, content="## Summary\nOne line.\n\n## Details\n- bullets", category="facts"|"people"|"concepts")`. Call `recall` first to avoid duplicates.
+- If `remember` returns an overlap warning (e.g. "Overlaps: slug (0.82)"), read both notes with `read_note`, merge the content into the better-named one, then `forget(slug)` the weaker one to deduplicate. Consolidation keeps the vault clean and improves retrieval accuracy.
+- One topic per note, bullet points. Read a note verbatim with `read_note(slug)` (e.g. `status-yank`). Categories: facts, people, projects, concepts.

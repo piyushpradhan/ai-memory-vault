@@ -1,6 +1,6 @@
 ## AI memory (automatic — never ask the user to "remember" anything)
 
-A persistent memory vault is available via the `aimemory` MCP tools (`recall`, `remember`, `forget`, `read_note`). Relevant context is also auto-injected into each prompt when available.
+A persistent memory vault is available via the `aimemory` MCP tools (`recall`, `remember`, `forget`, `read_note`). Relevant context is auto-injected at the start of each session when available; call `recall(query)` for on-demand retrieval during the session.
 
 - Before answering, use any injected context, or call `recall(query)` to surface relevant facts, preferences, or project state.
 - After completing or deciding anything significant in a project, upsert its status note: `remember(title="status-<project>", category="projects", content="## Done\n- ...\n## In progress\n- ...\n## Next\n- ...\n## Decisions\n- ...")`. Same title overwrites (slug-keyed, no duplicates).

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aimemory.watchdog</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/mediocre/projects/ai-memory/scripts/watchdog.sh</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>120</integer>
+    <key>WorkingDirectory</key>
+    <string>/Users/mediocre/projects/ai-memory</string>
+    <key>StandardOutPath</key>
+    <string>/Users/mediocre/projects/ai-memory/logs/watchdog.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/mediocre/projects/ai-memory/logs/watchdog.err</string>
+</dict>
+</plist>

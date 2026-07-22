@@ -13,17 +13,22 @@ mkdir -p "$LOGS_DIR"
 # Copy launchd plists
 cp "$PROJ_DIR/scripts/com.aimemory.server.plist" "$AGENT_DIR/"
 cp "$PROJ_DIR/scripts/com.aimemory.reindex.plist" "$AGENT_DIR/"
+cp "$PROJ_DIR/scripts/com.aimemory.watchdog.plist" "$AGENT_DIR/"
+chmod +x "$PROJ_DIR/scripts/watchdog.sh"
 
 # Unload if already loaded
 launchctl unload "$AGENT_DIR/com.aimemory.server.plist" 2>/dev/null || true
 launchctl unload "$AGENT_DIR/com.aimemory.reindex.plist" 2>/dev/null || true
+launchctl unload "$AGENT_DIR/com.aimemory.watchdog.plist" 2>/dev/null || true
 
 # Load agents
 launchctl load "$AGENT_DIR/com.aimemory.server.plist"
 launchctl load "$AGENT_DIR/com.aimemory.reindex.plist"
+launchctl load "$AGENT_DIR/com.aimemory.watchdog.plist"
 
 echo "Server started (port 8420) — will auto-restart on crash/reboot."
 echo "Re-index runs every 5 min — catches edits made in Obsidian."
+echo "Watchdog runs every 2 min — kills+restarts the server if it hangs (alive but unresponsive)."
 echo ""
 echo "Check status:  curl http://localhost:8420/health"
 echo "View logs:     tail -f $LOGS_DIR/server.log"
@@ -31,3 +36,4 @@ echo ""
 echo "To stop:"
 echo "  launchctl unload $AGENT_DIR/com.aimemory.server.plist"
 echo "  launchctl unload $AGENT_DIR/com.aimemory.reindex.plist"
+echo "  launchctl unload $AGENT_DIR/com.aimemory.watchdog.plist"
